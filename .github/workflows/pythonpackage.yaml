@@ -25,7 +25,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
       - name: Install dependencies
         run: |
-          uv pip install -r requirements.test.txt
+          uv pip install --system -r requirements.test.txt
 
       - name: Run pytest
         run: |
