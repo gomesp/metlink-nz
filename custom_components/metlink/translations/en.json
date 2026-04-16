@@ -17,7 +17,7 @@
 		"data": {
 		    "stop_id": "3 to 4 digit or letter stop id.",
 		    "route": "(Optional) Route filter.",
-		    "destination": "(Optional} Final destination filter.",
+		    "destination": "(Optional) Final destination filter.",
 		    "num_departures": "Number of departures to track. (Default: 1)",
 		    "add_another": "Add another stop?"
 		}
