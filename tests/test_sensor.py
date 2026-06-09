@@ -117,6 +117,7 @@ async def test_async_update_success(hass, aioclient_mock):
     """Tests a fully successful async_update."""
     metlink = MagicMock()
     metlink.get_predictions = AsyncMock(side_effect=TEST_RESPONSE)
+    metlink.get_service_alerts = AsyncMock(return_value={"entity": []})
     sensor = MetlinkSensor(
         metlink,
         {CONF_STOP_ID: "WELL", CONF_ROUTE: "KPL", CONF_DEST: "Porirua"},
@@ -135,6 +136,9 @@ async def test_async_update_success(hass, aioclient_mock):
         "destination": "Porirua",
         "delay": 0,
         "wheelchair_accessible": False,
+        "monitored": False,
+        "vehicle_id": None,
+        "alert_count": 0,
     }
 
     assert expected == sensor.attrs
@@ -149,6 +153,7 @@ async def test_async_update_success(hass, aioclient_mock):
 async def test_async_update_failed():
     """Tests a failed async_update."""
     metlink = MagicMock()
+    metlink.get_service_alerts = AsyncMock(return_value={"entity": []})
     metlink.get_predictions = AsyncMock(
         side_effect=ClientResponseError(request_info="dummy", history="")
     )
@@ -163,6 +168,7 @@ async def test_async_update_failed():
 async def test_async_update_misformatted():
     """Tests a misformatted async_update."""
     metlink = MagicMock()
+    metlink.get_service_alerts = AsyncMock(return_value={"entity": []})
     metlink.get_predictions = AsyncMock(side_effect=TypeError("Test error handling"))
 
     sensor = MetlinkSensor(metlink, {"stop_id": "WELL"})
@@ -176,6 +182,7 @@ async def test_async_update_multiple(hass, aioclient_mock):
     """Tests a fully successful async_update."""
     metlink = MagicMock()
     metlink.get_predictions = AsyncMock(side_effect=TEST_RESPONSE)
+    metlink.get_service_alerts = AsyncMock(return_value={"entity": []})
     sensor = MetlinkSensor(
         metlink,
         {CONF_STOP_ID: "WELL", CONF_ROUTE: "KPL", CONF_NUM_DEPARTURES: 4},
@@ -194,6 +201,9 @@ async def test_async_update_multiple(hass, aioclient_mock):
         "destination": "WAIK-All stops",
         "delay": 0,
         "wheelchair_accessible": False,
+        "monitored": False,
+        "vehicle_id": None,
+        "alert_count": 0,
         "departure_2": "2021-04-29T21:55:00+12:00",
         "description_2": "KPL Porirua",
         "service_id_2": "KPL",
@@ -202,6 +212,9 @@ async def test_async_update_multiple(hass, aioclient_mock):
         "destination_2": "Porirua",
         "delay_2": 0,
         "wheelchair_accessible_2": False,
+        "monitored_2": False,
+        "vehicle_id_2": None,
+        "alert_count_2": 0,
         "departure_3": "2021-04-29T22:45:34+12:00",
         "description_3": "KPL Porirua",
         "service_id_3": "KPL",
@@ -210,6 +223,9 @@ async def test_async_update_multiple(hass, aioclient_mock):
         "destination_3": "Porirua",
         "delay_3": 30,
         "wheelchair_accessible_3": False,
+        "monitored_3": False,
+        "vehicle_id_3": None,
+        "alert_count_3": 0,
     }
 
     assert expected == sensor.attrs
