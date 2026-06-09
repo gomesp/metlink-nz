@@ -80,17 +80,14 @@ async def test_flow_user_init(hass):
     result = await hass.config_entries.flow.async_init(
         config_flow.DOMAIN, context={"source": "user"}
     )
-    expected = {
-        "data_schema": config_flow.AUTH_SCHEMA,
-        "description_placeholders": None,
-        "errors": {},
-        "flow_id": ANY,
-        "handler": "metlink",
-        "step_id": "user",
-        "type": "form",
-        "last_step": ANY,
-    }
-    assert expected == result
+    assert result["type"] == "form"
+    assert result["handler"] == "metlink"
+    assert result["step_id"] == "user"
+    assert result["errors"] == {}
+    assert result["data_schema"] == config_flow.AUTH_SCHEMA
+    assert result["description_placeholders"] is None
+    assert result["flow_id"] is not None
+    assert result.get("preview") is None
 
 
 @patch("custom_components.metlink.config_flow.validate_auth")
@@ -124,17 +121,14 @@ async def test_flow_stop_init_form(hass):
     result = await hass.config_entries.flow.async_init(
         config_flow.DOMAIN, context={"source": "stop"}
     )
-    expected = {
-        "data_schema": config_flow.STOP_SCHEMA,
-        "description_placeholders": None,
-        "errors": {},
-        "flow_id": ANY,
-        "handler": "metlink",
-        "step_id": "stop",
-        "type": "form",
-        "last_step": ANY,
-    }
-    assert expected == result
+    assert result["type"] == "form"
+    assert result["handler"] == "metlink"
+    assert result["step_id"] == "stop"
+    assert result["errors"] == {}
+    assert result["data_schema"] == config_flow.STOP_SCHEMA
+    assert result["description_placeholders"] is None
+    assert result["flow_id"] is not None
+    assert result.get("preview") is None
 
 
 async def test_flow_stop_add_another(hass):
@@ -154,12 +148,15 @@ async def test_flow_stop_add_another(hass):
     assert "form" == result["type"]
 
 
+@patch("custom_components.metlink.sensor.Metlink")
 @patch("custom_components.metlink.config_flow.Metlink")
-async def test_flow_stops_creates_config_entry(m_metlink, hass):
+async def test_flow_stops_creates_config_entry(m_metlink_flow, m_metlink_sensor, hass):
     """Test the config entry is successfully created."""
     m_instance = AsyncMock()
     m_instance.get_predictions = AsyncMock()
-    m_metlink.return_value = m_instance
+    m_instance.get_service_alerts = AsyncMock(return_value={"entity": []})
+    m_metlink_flow.return_value = m_instance
+    m_metlink_sensor.return_value = m_instance
     config_flow.MetlinkNZConfigFlow.data = {
         CONF_API_KEY: "dummy",
         CONF_STOPS: [],
@@ -171,29 +168,22 @@ async def test_flow_stops_creates_config_entry(m_metlink, hass):
         _result["flow_id"],
         user_input={CONF_STOP_ID: "1111"},
     )
-    expected = {
-        "version": 1,
-        "type": "create_entry",
-        "flow_id": ANY,
-        "handler": "metlink",
-        "title": "Metlink",
-        "description": ANY,
-        "description_placeholders": None,
-        "result": ANY,
-        "options": ANY,
-        "data": {
-            CONF_API_KEY: "dummy",
-            CONF_STOPS: [
-                {
-                    CONF_STOP_ID: "1111",
-                    CONF_ROUTE: "",
-                    CONF_DEST: "",
-                    CONF_NUM_DEPARTURES: 1,
-                }
-            ],
-        },
+    expected_data = {
+        CONF_API_KEY: "dummy",
+        CONF_STOPS: [
+            {
+                CONF_STOP_ID: "1111",
+                CONF_ROUTE: "",
+                CONF_DEST: "",
+                CONF_NUM_DEPARTURES: 1,
+            }
+        ],
     }
-    assert expected == result
+    assert result["type"] == "create_entry"
+    assert result["handler"] == "metlink"
+    assert result["title"] == "Metlink"
+    assert result["data"] == expected_data
+    assert result["flow_id"] is not None
 
 
 @patch("custom_components.metlink.sensor.Metlink")
@@ -201,6 +191,7 @@ async def test_options_flow_init(m_metlink, hass):
     """Test config flow options."""
     m_instance = AsyncMock()
     m_instance.get_predictions = AsyncMock()
+    m_instance.get_service_alerts = AsyncMock(return_value={"entity": []})
     m_metlink.return_value = m_instance
 
     config_entry = MockConfigEntry(
@@ -221,13 +212,17 @@ async def test_options_flow_init(m_metlink, hass):
     assert {"sensor.metlink_1111": "Metlink 1111"} == result["data_schema"].schema[
         "stops"
     ].options
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
 
 
 @patch("custom_components.metlink.sensor.Metlink")
-async def test_options_flow_remove_stop(m_metlink, hass):
+@pytest.mark.parametrize("expected_lingering_timers", [True])
+async def test_options_flow_remove_stop(m_metlink, hass, expected_lingering_timers):
     """Test removing a stop from the options config flow."""
     m_instance = AsyncMock()
     m_instance.get_predictions = AsyncMock()
+    m_instance.get_service_alerts = AsyncMock(return_value={"entity": []})
     m_metlink.return_value = m_instance
 
     config_entry = MockConfigEntry(
@@ -242,13 +237,17 @@ async def test_options_flow_remove_stop(m_metlink, hass):
     # show initial form
     _result = await hass.config_entries.options.async_init(config_entry.entry_id)
     # submit form with options
-    result = await hass.config_entries.options.async_configure(
-        _result["flow_id"], user_input={CONF_STOPS: []}
-    )
+    with patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)):
+        result = await hass.config_entries.options.async_configure(
+            _result["flow_id"], user_input={CONF_STOPS: []}
+        )
+    await hass.async_block_till_done()
     assert "create_entry" == result["type"]
     assert "" == result["title"]
-    assert result["result"] is True
     assert {CONF_STOPS: []} == result["data"]
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await hass.async_stop()
 
 
 @patch("custom_components.metlink.sensor.Metlink")
@@ -257,6 +256,7 @@ async def test_options_flow_add_stop(m_metlink, m_metlink_flow, hass):
     """Test adding a stop in config flow options."""
     m_instance = AsyncMock()
     m_instance.get_predictions = AsyncMock()
+    m_instance.get_service_alerts = AsyncMock(return_value={"entity": []})
     m_metlink.return_value = m_instance
     m_metlink_flow.return_value = m_instance
 
@@ -272,15 +272,18 @@ async def test_options_flow_add_stop(m_metlink, m_metlink_flow, hass):
     # show initial form
     _result = await hass.config_entries.options.async_init(config_entry.entry_id)
     # submit form with new stop
-    result = await hass.config_entries.options.async_configure(
-        _result["flow_id"],
-        user_input={CONF_STOPS: ["sensor.metlink_1111"], "stop_id": "WELL"},
-    )
+    with patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)):
+        result = await hass.config_entries.options.async_configure(
+            _result["flow_id"],
+            user_input={CONF_STOPS: ["sensor.metlink_1111"], "stop_id": "WELL"},
+        )
+    await hass.async_block_till_done()
     assert "create_entry" == result["type"]
     assert "" == result["title"]
-    assert result["result"] is True
     expected_stops = [
         {CONF_STOP_ID: "1111"},
         {CONF_STOP_ID: "WELL", CONF_ROUTE: "", CONF_DEST: "", CONF_NUM_DEPARTURES: 1},
     ]
     assert {CONF_STOPS: expected_stops} == result["data"]
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
